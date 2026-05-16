@@ -142,10 +142,15 @@ await apiInstance.sendTransacEmail({
       </p>
 
       <img
-        src="${qrCode}"
-        width="250"
-      />
-
+  src="${qrCode}"
+  alt="QR Code"
+  width="250"
+  height="250"
+  style="
+    display:block;
+    margin-top:20px;
+  "
+/>
       <p>
         This QR code is your official gate pass.
       </p>
