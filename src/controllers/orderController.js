@@ -6,191 +6,539 @@ import catchAsync from '../utils/catchAsync.js';
 import logger from '../config/logger.js';
 import { initializePayment } from '../utils/flutterwave.js';
 
+import Attendee from '../models/Attendee.js';
+import QRCode from 'qrcode';
+import { v4 as uuidv4 } from 'uuid';
+import nodemailer from 'nodemailer';
+
 /**
  * Create an order during checkout
  * Validates ticket availability and creates order with pending payment status
  */
 const createOrder = catchAsync(async (req, res, next) => {
-  const { eventId, buyerDetails, ticketType, quantity, attendees, paymentMethod } =
-    req.body;
+
+  const {
+    eventId,
+    buyerDetails,
+    ticketType,
+    quantity,
+    attendees,
+    paymentMethod
+  } = req.body;
 
   // Validate required fields
-  if (!eventId || !buyerDetails || !ticketType || !quantity || !paymentMethod) {
+  if (
+    !eventId ||
+    !buyerDetails ||
+    !ticketType ||
+    !quantity ||
+    !paymentMethod
+  ) {
+
     return next(
-      new AppError('Missing required fields for checkout', 400)
+      new AppError(
+        'Missing required fields for checkout',
+        400
+      )
     );
+
   }
 
   // Validate buyer details
-  if (!buyerDetails.name || !buyerDetails.whatsapp || !buyerDetails.email) {
+  if (
+    !buyerDetails.name ||
+    !buyerDetails.whatsapp ||
+    !buyerDetails.email
+  ) {
+
     return next(
-      new AppError('Incomplete buyer details provided', 400)
+      new AppError(
+        'Incomplete buyer details provided',
+        400
+      )
     );
+
   }
 
-  // Fetch event by ID
-  const event = await Event.findById(eventId);
+  // Fetch event
+  const event =
+    await Event.findById(eventId);
 
   if (!event) {
-    logger.warn(`Checkout attempted for non-existent event: ${eventId}`);
-    return next(new AppError('Event not found', 404));
+
+    logger.warn(
+      `Checkout attempted for non-existent event: ${eventId}`
+    );
+
+    return next(
+      new AppError(
+        'Event not found',
+        404
+      )
+    );
+
   }
 
-  // Find the matching ticket tier
-  const tier = event.ticketTiers.find((t) => t.name === ticketType);
+  // Find ticket tier
+  const tier =
+    event.ticketTiers.find(
+      (t) => t.name === ticketType
+    );
 
   if (!tier) {
+
     logger.warn(
       `Invalid ticket tier "${ticketType}" for event: ${eventId}`
     );
+
     return next(
       new AppError(
         `Ticket tier "${ticketType}" not available for this event`,
         400
       )
     );
+
   }
 
-  // Check ticket availability
-  const availableTickets = tier.capacity - tier.sold;
+  // Check availability
+  const availableTickets =
+    tier.capacity - tier.sold;
 
   if (availableTickets < quantity) {
+
     logger.warn(
       `Insufficient tickets. Available: ${availableTickets}, Requested: ${quantity}`
     );
+
     return next(
       new AppError(
         `Not enough tickets available. Only ${availableTickets} tickets remaining.`,
         400
       )
     );
+
   }
 
-  // Validate quantity is a positive integer
-  if (!Number.isInteger(quantity) || quantity <= 0) {
-    return next(new AppError('Quantity must be a positive integer', 400));
+  // Validate quantity
+  if (
+    !Number.isInteger(quantity) ||
+    quantity <= 0
+  ) {
+
+    return next(
+      new AppError(
+        'Quantity must be a positive integer',
+        400
+      )
+    );
+
   }
 
-  // Calculate total amount
-  const totalAmount = tier.price * quantity;
+  // Calculate amount
+  const totalAmount =
+    tier.price * quantity;
 
-  // Generate unique reference (timestamp + random bytes)
-  const reference = `ORD-${Date.now()}-${crypto
-    .randomBytes(4)
-    .toString('hex')
-    .toUpperCase()}`;
+  // Generate reference
+  const reference =
+    `ORD-${Date.now()}-${crypto
+      .randomBytes(4)
+      .toString('hex')
+      .toUpperCase()}`;
 
-  // Create order with Pending payment status
-  const order = await Order.create({
-    event: eventId,
-    buyerDetails: {
-      name: buyerDetails.name.trim(),
-      whatsapp: buyerDetails.whatsapp.trim(),
-      email: buyerDetails.email.trim().toLowerCase(),
-    },
-    ticketType,
-    quantity,
-    attendees: attendees || [],
-    payment: {
-      totalAmount,
-      method: paymentMethod,
-      status: 'Pending',
-      reference,
-    },
-  });
+  // Create order
+  const order =
+    await Order.create({
 
-  // Initialize Flutterwave payment
-  const checkoutUrl = await initializePayment({
-    orderRef: reference,
-    amount: totalAmount,
-    email: buyerDetails.email.trim().toLowerCase(),
-    name: buyerDetails.name.trim(),
-    phone: buyerDetails.whatsapp.trim(),
-  });
+      event: eventId,
 
-  logger.info(`Order created and payment initialized: ${reference}`, {
-    orderId: order._id,
-    eventId,
-    quantity,
-  });
+      buyerDetails: {
+
+        name:
+          buyerDetails.name.trim(),
+
+        whatsapp:
+          buyerDetails.whatsapp.trim(),
+
+        email:
+          buyerDetails.email
+            .trim()
+            .toLowerCase(),
+
+      },
+
+      ticketType,
+
+      quantity,
+
+      attendees:
+        attendees || [],
+
+      payment: {
+
+        totalAmount,
+
+        method:
+          paymentMethod,
+
+        status: 'Pending',
+
+        reference,
+
+      },
+
+    });
+
+  // Initialize Flutterwave
+  const checkoutUrl =
+    await initializePayment({
+
+      orderRef:
+        reference,
+
+      amount:
+        totalAmount,
+
+      email:
+        buyerDetails.email
+          .trim()
+          .toLowerCase(),
+
+      name:
+        buyerDetails.name.trim(),
+
+      phone:
+        buyerDetails.whatsapp.trim(),
+
+    });
+
+  logger.info(
+    `Order created and payment initialized: ${reference}`,
+    {
+      orderId: order._id,
+      eventId,
+      quantity,
+    }
+  );
 
   res.status(201).json({
+
     status: 'success',
-    message: 'Order created. Proceed to payment.',
+
+    message:
+      'Order created. Proceed to payment.',
+
     data: {
+
       order,
-      paymentReference: reference,
+
+      paymentReference:
+        reference,
+
       totalAmount,
+
       checkoutUrl,
+
     },
+
   });
+
 });
 
 /**
- * Handle Flutterwave webhook for payment confirmation
- * Verifies the signature and updates order status on successful payment
+ * Flutterwave Webhook
  */
 const flutterwaveWebhook = catchAsync(async (req, res, next) => {
-  // Extract signature from header
-  const signature = req.headers['verif-hash'];
 
-  // Validate signature against secret hash
-  if (signature !== process.env.FLW_SECRET_HASH) {
-    logger.warn('Webhook signature verification failed');
-    return next(new AppError('Invalid webhook signature', 401));
+  // Extract signature
+  const signature =
+    req.headers['verif-hash'];
+
+  // Validate signature
+  if (
+    signature !==
+    process.env.FLW_SECRET_HASH
+  ) {
+
+    logger.warn(
+      'Webhook signature verification failed'
+    );
+
+    return next(
+      new AppError(
+        'Invalid webhook signature',
+        401
+      )
+    );
+
   }
 
-  // Extract webhook payload
-  const { event, data } = req.body;
+  // Extract payload
+  const { event, data } =
+    req.body;
 
-  // Check if payment was successful
-  if (event === 'charge.completed' && data.status === 'successful') {
+  // Check payment success
+  if (
+    event === 'charge.completed' &&
+    data.status === 'successful'
+  ) {
+
     try {
-      // Find order by transaction reference
-      const order = await Order.findOne({
-        'payment.reference': data.tx_ref,
-      });
+
+      // Find order
+      const order =
+        await Order.findOne({
+          'payment.reference':
+            data.tx_ref,
+        });
 
       if (!order) {
-        logger.warn(`Order not found for reference: ${data.tx_ref}`);
-        return res.status(200).end(); // Still acknowledge webhook
+
+        logger.warn(
+          `Order not found for reference: ${data.tx_ref}`
+        );
+
+        return res.status(200).end();
+
       }
 
-      // Update order payment status
-      order.payment.status = 'Successful';
+      /**
+       * Prevent duplicate webhook processing
+       */
+      if (
+        order.payment.status ===
+        'Successful'
+      ) {
+
+        return res.status(200).end();
+
+      }
+
+      // Update payment status
+      order.payment.status =
+        'Successful';
+
       await order.save();
 
-      logger.info(`Payment successful for order: ${data.tx_ref}`);
+      logger.info(
+        `Payment successful for order: ${data.tx_ref}`
+      );
 
-      // Find the event and update ticket tier sold count
-      const eventData = await Event.findById(order.event);
+      /**
+       * Find event
+       */
+      const eventData =
+        await Event.findById(
+          order.event
+        );
 
       if (!eventData) {
-        logger.error(`Event not found for order: ${order._id}`);
+
+        logger.error(
+          `Event not found for order: ${order._id}`
+        );
+
         return res.status(200).end();
+
       }
 
-      // Find the matching ticket tier and increment sold count
-      const tier = eventData.ticketTiers.find((t) => t.name === order.ticketType);
+      /**
+       * Update sold tickets
+       */
+      const tier =
+        eventData.ticketTiers.find(
+          (t) =>
+            t.name ===
+            order.ticketType
+        );
 
       if (tier) {
-        tier.sold += order.quantity;
+
+        tier.sold +=
+          order.quantity;
+
         await eventData.save();
+
         logger.info(
           `Ticket tier updated: ${order.ticketType}, sold: ${tier.sold}`
         );
-      } else {
-        logger.warn(
-          `Ticket tier "${order.ticketType}" not found for event: ${eventData._id}`
-        );
+
       }
+
+      /**
+       * Email transporter
+       */
+      const transporter =
+        nodemailer.createTransport({
+
+          service: 'gmail',
+
+          auth: {
+
+            user:
+              process.env.EMAIL_USER,
+
+            pass:
+              process.env.EMAIL_PASS,
+
+          },
+
+        });
+
+      /**
+       * Create attendees
+       */
+      for (
+        let i = 0;
+        i < order.quantity;
+        i++
+      ) {
+
+        // Ticket ID
+        const ticketId =
+          'DFA-' +
+          uuidv4()
+            .slice(0, 8)
+            .toUpperCase();
+
+        // QR data
+        const qrData =
+          JSON.stringify({
+
+            ticketId,
+
+            email:
+              order.buyerDetails.email,
+
+          });
+
+        // QR image
+        const qrCode =
+          await QRCode.toDataURL(
+            qrData
+          );
+
+        // Save attendee
+        const attendee =
+          await Attendee.create({
+
+            name:
+              order.buyerDetails.name,
+
+            email:
+              order.buyerDetails.email,
+
+            phone:
+              order.buyerDetails.whatsapp,
+
+            eventId:
+              order.event,
+
+            eventTitle:
+              eventData.title,
+
+            ticketType:
+              order.ticketType,
+
+            amountPaid:
+              order.payment.totalAmount,
+
+            paymentStatus:
+              'Paid',
+
+            checkedIn: false,
+
+            ticketId,
+
+            qrCode,
+
+          });
+
+        /**
+         * Send email
+         */
+        await transporter.sendMail({
+
+          from:
+            process.env.EMAIL_USER,
+
+          to:
+            attendee.email,
+
+          subject:
+            'Your DFA Event Ticket 🎟️',
+
+          html: `
+            <div style="font-family:sans-serif;padding:20px;">
+
+              <h2>
+                Thank you for purchasing your ticket 🎉
+              </h2>
+
+              <p>
+                Your payment was successful.
+              </p>
+
+              <p>
+                Event:
+                <strong>
+                  ${eventData.title}
+                </strong>
+              </p>
+
+              <p>
+                Ticket Type:
+                <strong>
+                  ${attendee.ticketType}
+                </strong>
+              </p>
+
+              <p>
+                Ticket ID:
+                <strong>
+                  ${attendee.ticketId}
+                </strong>
+              </p>
+
+              <p>
+                Present this QR code at the venue entrance.
+              </p>
+
+              <img
+                src="${qrCode}"
+                width="250"
+              />
+
+              <p>
+                This QR code serves as your official gate pass.
+              </p>
+
+            </div>
+          `
+
+        });
+
+      }
+
+      logger.info(
+        `Attendees created and tickets emailed for order: ${data.tx_ref}`
+      );
+
     } catch (error) {
-      logger.error(`Webhook processing error: ${error.message}`);
+
+      logger.error(
+        `Webhook processing error: ${error.message}`
+      );
+
     }
+
   }
 
-  // Always return 200 to acknowledge webhook receipt
+  // Acknowledge webhook
   res.status(200).end();
+
 });
 
-export { createOrder, flutterwaveWebhook };
+export {
+  createOrder,
+  flutterwaveWebhook
+};
