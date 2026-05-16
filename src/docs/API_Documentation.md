@@ -1,7 +1,7 @@
 # DFA Ticketing & Admin Dashboard API Documentation
 
 ## Base URL
-`http://localhost:5000/api/v1` *(Will change to production URL later)*
+`https://dfa-backend-lilj.onrender.com/api/v1` *(Will change to production URL later)*
 
 ## Authentication
 Admin routes require a JWT Bearer token in the request headers.

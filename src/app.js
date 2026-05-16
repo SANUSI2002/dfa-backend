@@ -10,6 +10,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import contentRoutes from './routes/contentRoutes.js';
 import staffRoutes from './routes/staffRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import attendeeRoutes from './routes/attendeeRoutes.js';
 
 import errorHandler from './middleware/errorHandler.js';
 
@@ -30,11 +31,32 @@ app.use(
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:5500',
-      'http://localhost:5500'
+      'http://localhost:5500',
+
+      // Vercel
+      'https://dfa-site-l49g.vercel.app',
+      'https://dash-rosy-five.vercel.app',
+
+      // Custom Domains
+      'https://dfaummah.com',
+      'https://www.dfaummah.com',
+      'https://dashboard.dfaummah.com'
     ],
+
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+
+    methods: [
+      'GET',
+      'POST',
+      'PUT',
+      'DELETE',
+      'PATCH'
+    ],
+
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization'
+    ],
   })
 );
 
@@ -59,7 +81,11 @@ app.use(limiter);
 /**
  * Body Parsers
  */
-app.use(express.json({ limit: '10kb' }));
+app.use(
+  express.json({
+    limit: '10kb'
+  })
+);
 
 app.use(
   express.urlencoded({
@@ -97,6 +123,8 @@ app.use('/api/v1/content', contentRoutes);
 app.use('/api/v1/staff', staffRoutes);
 
 app.use('/api/v1/auth', authRoutes);
+
+app.use('/api/v1/attendees', attendeeRoutes);
 
 /**
  * Health Check
