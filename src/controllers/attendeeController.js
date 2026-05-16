@@ -1,7 +1,7 @@
 import Attendee from "../models/Attendee.js";
 import QRCode from "qrcode";
 import { v4 as uuidv4 } from "uuid";
-import nodemailer from "nodemailer";
+import SibApiV3Sdk from "sib-api-v3-sdk";
 
 /**
  * Create attendee after payment
@@ -10,6 +10,7 @@ export const createAttendee = async (
   req,
   res
 ) => {
+
   try {
 
     const {
@@ -22,23 +23,35 @@ export const createAttendee = async (
       amountPaid
     } = req.body;
 
-    // Generate unique ticket ID
+    /**
+     * Generate ticket ID
+     */
     const ticketId =
       "DFA-" +
-      uuidv4().slice(0, 8).toUpperCase();
+      uuidv4()
+        .slice(0, 8)
+        .toUpperCase();
 
-    // Generate QR code
-    const qrData = JSON.stringify({
-      ticketId,
-      email
-    });
+    /**
+     * Generate QR code
+     */
+    const qrData =
+      JSON.stringify({
+        ticketId,
+        email
+      });
 
     const qrCode =
-      await QRCode.toDataURL(qrData);
+      await QRCode.toDataURL(
+        qrData
+      );
 
-    // Save attendee
+    /**
+     * Save attendee
+     */
     const attendee =
       await Attendee.create({
+
         name,
         email,
         phone,
@@ -48,83 +61,126 @@ export const createAttendee = async (
         amountPaid,
         ticketId,
         qrCode
+
       });
 
     /**
-     * Send email
+     * Return success immediately
      */
-    const transporter =
-      nodemailer.createTransport({
-        service: "gmail",
-        auth: {
-          user:
-            process.env.EMAIL_USER,
-          pass:
-            process.env.EMAIL_PASS
-        }
-      });
-
-    await transporter.sendMail({
-      from:
-        process.env.EMAIL_USER,
-
-      to: email,
-
-      subject:
-        "Your DFA Event Ticket",
-
-      html: `
-        <div style="font-family:sans-serif;padding:20px;">
-          <h2>
-            Thank you for purchasing your ticket 🎉
-          </h2>
-
-          <p>
-            Event:
-            <strong>${eventTitle}</strong>
-          </p>
-
-          <p>
-            Ticket Type:
-            <strong>${ticketType}</strong>
-          </p>
-
-          <p>
-            Ticket ID:
-            <strong>${ticketId}</strong>
-          </p>
-
-          <p>
-            Please present this QR code at the entrance.
-          </p>
-
-          <img
-            src="${qrCode}"
-            width="250"
-          />
-
-          <p>
-            This QR code is your official gate pass.
-          </p>
-        </div>
-      `
-    });
-
     res.status(201).json({
+
       success: true,
       attendee
+
     });
+
+    /**
+     * Send email in background
+     */
+    try {
+
+   const defaultClient =
+  SibApiV3Sdk.ApiClient.instance;
+
+const apiKey =
+  defaultClient.authentications[
+    "api-key"
+  ];
+
+apiKey.apiKey =
+  process.env.BREVO_API_KEY;
+
+const apiInstance =
+  new SibApiV3Sdk.TransactionalEmailsApi();
+
+await apiInstance.sendTransacEmail({
+
+  sender: {
+
+    email:
+      "sanusidamilare333@gmail.com",
+
+    name:
+      "DFA"
+
+  },
+
+  to: [
+    {
+      email
+    }
+  ],
+
+  subject:
+    "Your DFA Event Ticket",
+
+  htmlContent: `
+
+    <div style="font-family:sans-serif;padding:20px;">
+
+      <h2>
+        Thank you for purchasing your ticket 🎉
+      </h2>
+
+      <p>
+        Event:
+        <strong>${eventTitle}</strong>
+      </p>
+
+      <p>
+        Ticket Type:
+        <strong>${ticketType}</strong>
+      </p>
+
+      <p>
+        Ticket ID:
+        <strong>${ticketId}</strong>
+      </p>
+
+      <p>
+        Please present this QR code at the entrance.
+      </p>
+
+      <img
+        src="${qrCode}"
+        width="250"
+      />
+
+      <p>
+        This QR code is your official gate pass.
+      </p>
+
+    </div>
+
+  `
+
+});
+
+console.log(
+  "Email sent successfully"
+);
+    } catch (emailError) {
+
+      console.log(
+        "Email failed:",
+        emailError.message
+      );
+
+    }
 
   } catch (error) {
 
     console.log(error);
 
     res.status(500).json({
+
       success: false,
       message: error.message
+
     });
 
   }
+
 };
 
 /**
@@ -133,14 +189,29 @@ export const createAttendee = async (
 export const getAttendees =
   async (req, res) => {
 
-    const attendees =
-      await Attendee.find()
-      .sort({ createdAt: -1 });
+    try {
 
-    res.json({
-      success: true,
-      attendees
-    });
+      const attendees =
+        await Attendee.find()
+        .sort({ createdAt: -1 });
+
+      res.json({
+
+        success: true,
+        attendees
+
+      });
+
+    } catch (error) {
+
+      res.status(500).json({
+
+        success: false,
+        message: error.message
+
+      });
+
+    }
 
 };
 
@@ -163,9 +234,12 @@ export const checkInAttendee =
       if (!attendee) {
 
         return res.status(404).json({
+
           success: false,
+
           message:
             "Ticket not found"
+
         });
 
       }
@@ -173,9 +247,12 @@ export const checkInAttendee =
       if (attendee.checkedIn) {
 
         return res.status(400).json({
+
           success: false,
+
           message:
             "Ticket already used"
+
         });
 
       }
@@ -185,17 +262,59 @@ export const checkInAttendee =
       await attendee.save();
 
       res.json({
+
         success: true,
+
         message:
           "Checked in successfully",
+
         attendee
+
       });
 
     } catch (error) {
 
       res.status(500).json({
+
         success: false,
+
         message: error.message
+
+      });
+
+    }
+
+};
+
+/**
+ * Delete attendee
+ */
+export const deleteAttendee =
+  async (req, res) => {
+
+    try {
+
+      await Attendee.findByIdAndDelete(
+        req.params.id
+      );
+
+      res.json({
+
+        success: true,
+
+        message:
+          "Attendee deleted"
+
+      });
+
+    } catch (error) {
+
+      res.status(500).json({
+
+        success: false,
+
+        message: error.message
+
       });
 
     }
