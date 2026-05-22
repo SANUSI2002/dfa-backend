@@ -1,35 +1,35 @@
 import express from "express";
-
 import {
   createAttendee,
   getAttendees,
-  checkInAttendee
+  checkInAttendee,
+  deleteAttendee,
 } from "../controllers/attendeeController.js";
 
 const router = express.Router();
 
 /**
- * Create attendee
+ * Create attendee (walk-in cash payment)
+ * POST /api/v1/attendees
  */
-router.post(
-  "/",
-  createAttendee
-);
+router.post("/", createAttendee);
 
 /**
- * Get attendees
+ * Get all attendees
+ * GET /api/v1/attendees
  */
-router.get(
-  "/",
-  getAttendees
-);
+router.get("/", getAttendees);
 
 /**
- * Check in attendee
+ * Check in attendee by ticketId (QR scan or manual)
+ * POST /api/v1/attendees/checkin
  */
-router.post(
-  "/checkin",
-  checkInAttendee
-);
+router.post("/checkin", checkInAttendee);
+
+/**
+ * Delete attendee by ID
+ * DELETE /api/v1/attendees/:id
+ */
+router.delete("/:id", deleteAttendee);
 
 export default router;
