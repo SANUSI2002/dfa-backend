@@ -6,36 +6,46 @@ import {
   getGallery,
   addVideo,
   getVideos,
+  getWebContent,
+  saveWebContent,
 } from '../controllers/contentController.js';
 
 const router = express.Router();
 
 /**
- * Content management routes (Media & Videos)
- * Requires authentication
- */
-
-// Apply authentication to all routes
-router.use(requireAuth);
-
-/**
- * Media/Gallery routes
+ * ── Media / Gallery routes ──────────────────────────────────────────────────
  */
 
 // Upload media file
-router.post('/media', upload.single('file'), uploadMedia);
+// POST /api/v1/content/media
+router.post('/media', requireAuth, upload.single('file'), uploadMedia);
 
 // Get media gallery
+// GET /api/v1/content/media
 router.get('/media', getGallery);
 
 /**
- * Video routes
+ * ── Video routes ────────────────────────────────────────────────────────────
  */
 
 // Add video to library
-router.post('/videos', addVideo);
+// POST /api/v1/content/videos
+router.post('/videos', requireAuth, addVideo);
 
 // Get videos
+// GET /api/v1/content/videos
 router.get('/videos', getVideos);
+
+/**
+ * ── Website Content routes ──────────────────────────────────────────────────
+ */
+
+// Get website content (public — landing page reads from here)
+// GET /api/v1/content/web-content
+router.get('/web-content', getWebContent);
+
+// Save website content (protected — only admins)
+// PUT /api/v1/content/web-content
+router.put('/web-content', requireAuth, saveWebContent);
 
 export default router;
